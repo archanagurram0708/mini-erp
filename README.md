@@ -54,11 +54,3 @@ The application uses a standard full-stack architecture:
 npm install
 npm start
 
-### Step 2: Push the updated `README.md` to GitHub
-
-Open a new terminal tab in VS Code and run:
-
-```bash
-git add README.md
-git commit -m "Update README with architecture, credentials, and project scope"
-git push origin main
