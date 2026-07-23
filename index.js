@@ -9,10 +9,12 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Connect PostgreSQL Database
+// Connect PostgreSQL Database with SSL handling
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: process.env.DATABASE_URL?.includes('localhost')
+    ? false
+    : { rejectUnauthorized: false }
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
@@ -34,7 +36,42 @@ app.get('/', (req, res) => {
   res.send('Mini ERP API is running!');
 });
 
-// --- AUTHENTICATION ---
+// --- AUTHENTICATION: REGISTER ---
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password, role } = req.body;
+
+  try {
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
+
+    // Check if user already exists
+    const userExists = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userExists.rows.length > 0) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Hash the password with bcrypt before saving
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Save with hashed password
+    const newUser = await pool.query(
+      'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
+      [name, email, hashedPassword, role || 'Admin']
+    );
+
+    res.status(201).json({ 
+      message: 'Registration successful!', 
+      user: newUser.rows[0] 
+    });
+  } catch (err) {
+    console.error('Register error:', err.message);
+    res.status(500).json({ message: err.message || 'Server error during registration' });
+  }
+});
+
+// --- AUTHENTICATION: LOGIN ---
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -146,4 +183,6 @@ app.post('/api/challans', authenticateToken, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
